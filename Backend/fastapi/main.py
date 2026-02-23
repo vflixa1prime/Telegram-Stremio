@@ -5,17 +5,21 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from Backend import __version__
 from Backend.fastapi.security.credentials import require_auth
-from Backend.fastapi.routes.stream_routes import router as stream_router
+from Backend.fastapi.routes.stream_routes import router as stream_router, decay_client_failures
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
     login_page, login_post, logout, set_theme, dashboard_page,
-    media_management_page, edit_media_page, public_status_page, stremio_guide_page
+    media_management_page, edit_media_page, public_status_page, stremio_guide_page,
+    admin_dashboard_page
 )
 from Backend.fastapi.routes.api_routes import (
     list_media_api, delete_media_api, update_media_api,
     delete_movie_quality_api, delete_tv_quality_api,
     delete_tv_episode_api, delete_tv_season_api,
-    create_token_api, revoke_token_api, update_token_limits_api
+    create_token_api, revoke_token_api, update_token_limits_api,
+    speed_test_api, speed_test_stream_api,
+    get_admin_stats_api, clear_cache_api, get_dead_links_api,
+    get_stream_analytics_api
 )
 
 app = FastAPI(
@@ -38,6 +42,11 @@ try:
     app.mount("/static", StaticFiles(directory="Backend/fastapi/static"), name="static")
 except Exception:
     pass
+
+@app.on_event("startup")
+async def _startup():
+    import asyncio
+    asyncio.create_task(decay_client_failures())
 
 # --- Include existing API routers ---
 app.include_router(stream_router)
@@ -72,6 +81,10 @@ async def stremio_guide(request: Request):
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request, _: bool = Depends(require_auth)):
     return await dashboard_page(request, _)
+
+@app.get("/admin/dashboard", response_class=HTMLResponse)
+async def admin_dashboard(request: Request, _: bool = Depends(require_auth)):
+    return await admin_dashboard_page(request, _)
 
 @app.get("/media/manage", response_class=HTMLResponse)
 async def media_management(request: Request, media_type: str = "movie", _: bool = Depends(require_auth)):
@@ -146,6 +159,42 @@ async def revoke_token(token: str, _: bool = Depends(require_auth)):
 async def get_system_stats(_: bool = Depends(require_auth)):
     from Backend.fastapi.routes.api_routes import get_system_stats_api
     return await get_system_stats_api()
+
+@app.get("/api/admin/system-stats")
+async def admin_system_stats(_: bool = Depends(require_auth)):
+    return await get_admin_stats_api()
+
+@app.post("/api/admin/clear-cache")
+async def clear_cache(_: bool = Depends(require_auth)):
+    return await clear_cache_api()
+
+@app.get("/api/admin/dead-links")
+async def get_dead_links(_: bool = Depends(require_auth)):
+    return await get_dead_links_api()
+
+@app.get("/api/admin/stream-analytics")
+async def get_stream_analytics(_: bool = Depends(require_auth)):
+    return await get_stream_analytics_api()
+
+@app.get("/api/system/speedtest")
+async def speed_test(
+    quality_id: str = Query(...),
+    tmdb_id: int = Query(...),
+    db_index: int = Query(...),
+    media_type: str = Query(...),
+    _: bool = Depends(require_auth)
+):
+    return await speed_test_api(quality_id, tmdb_id, db_index, media_type)
+
+@app.get("/api/system/speedtest/stream")
+async def speed_test_stream(
+    quality_id: str = Query(...),
+    tmdb_id: int = Query(...),
+    db_index: int = Query(...),
+    media_type: str = Query(...),
+    _: bool = Depends(require_auth)
+):
+    return await speed_test_stream_api(quality_id, tmdb_id, db_index, media_type)
 
 @app.exception_handler(401)
 async def auth_exception_handler(request: Request, exc):

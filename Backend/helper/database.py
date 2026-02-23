@@ -752,6 +752,33 @@ class Database:
         LOGGER.info(f"No document found with tmdb_id {tmdb_id}.")
         return False
 
+    async def get_title_by_stream_id(self, stream_id_hash: str) -> Optional[str]:
+        """Look up the original media title across all storage DBs using the telegram file ID hash.
+        For TV shows, it includes the Season and Episode number in the title."""
+        for i in range(1, self.current_db_index + 1):
+            db = self.dbs[f"storage_{i}"]
+            
+            # Check Movies
+            movie = await db["movie"].find_one({"telegram.id": stream_id_hash})
+            if movie and "telegram" in movie:
+                for t in movie["telegram"]:
+                    if t.get("id") == stream_id_hash:
+                        return movie.get("title")
+
+            # Check TV Shows
+            tv = await db["tv"].find_one({"seasons.episodes.telegram.id": stream_id_hash})
+            if tv and "seasons" in tv:
+                title = tv.get("title", "Unknown Series")
+                for season in tv.get("seasons", []):
+                    for episode in season.get("episodes", []):
+                        for t in episode.get("telegram", []):
+                            if t.get("id") == stream_id_hash:
+                                s_num = season.get("season_number", 0)
+                                e_num = episode.get("episode_number", 0)
+                                return f"{title} S{s_num:02d}E{e_num:02d}"
+
+        return None
+
     async def delete_movie_quality(self, tmdb_id: int, db_index: int, id: str) -> bool:
         db_key = f"storage_{db_index}"
         movie = await self.dbs[db_key]["movie"].find_one({"tmdb_id": tmdb_id})
@@ -990,3 +1017,190 @@ class Database:
             }}
         )
         return result.modified_count > 0
+
+    # -------------------------------
+    # Admin / Link Checker Methods
+    # -------------------------------
+    async def flag_dead_link(self, media_type: str, tmdb_id: int, db_index: int, quality_id: str) -> bool:
+        """
+        Flags a specific telegram quality entry as 'is_dead: True'.
+        """
+        db_key = f"storage_{db_index}"
+        
+        if media_type == "movie":
+            # Direct update in the telegram array for movies
+            result = await self.dbs[db_key]["movie"].update_one(
+                {"tmdb_id": tmdb_id, "telegram.id": quality_id},
+                {"$set": {"telegram.$.is_dead": True, "updated_on": datetime.utcnow()}}
+            )
+            return result.modified_count > 0
+            
+        elif media_type == "tv":
+            # Nested update for TV (arrayFilters needed since we don't know the exact indices)
+            # Find the TV show docs
+            tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
+            if not tv or "seasons" not in tv:
+                return False
+                
+            found = False
+            for s_idx, season in enumerate(tv["seasons"]):
+                for e_idx, episode in enumerate(season.get("episodes", [])):
+                    for q_idx, quality in enumerate(episode.get("telegram", [])):
+                        if quality.get("id") == quality_id:
+                            tv["seasons"][s_idx]["episodes"][e_idx]["telegram"][q_idx]["is_dead"] = True
+                            found = True
+                            break
+                    if found: break
+                if found: break
+                
+            if found:
+                tv["updated_on"] = datetime.utcnow()
+                result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
+                return result.modified_count > 0
+                
+        return False
+
+    async def get_all_dead_links(self) -> List[dict]:
+        """
+        Scans all active storage databases for both movies and TV shows, returning a
+        flattened list of dead links with their metadata for the Admin UI.
+        """
+        dead_links = []
+        
+        for i in range(1, self.current_db_index + 1):
+            db_key = f"storage_{i}"
+            db = self.dbs[db_key]
+            
+            # --- Scan Movies ---
+            # Match any movie where at least one telegram entry has is_dead=True
+            movie_cursor = db["movie"].find({"telegram.is_dead": True})
+            async for movie in movie_cursor:
+                for quality in movie.get("telegram", []):
+                    if quality.get("is_dead"):
+                        dead_links.append({
+                            "type": "movie",
+                            "tmdb_id": movie.get("tmdb_id"),
+                            "db_index": movie.get("db_index", i),
+                            "title": movie.get("title"),
+                            "year": movie.get("year"),
+                            "poster": movie.get("poster"),
+                            "quality_id": quality.get("id"),
+                            "quality": quality.get("quality"),
+                            "size": quality.get("size"),
+                            "date_added": quality.get("date_added")
+                        })
+                        
+            # --- Scan TV Shows ---
+            # Match any TV where seasons.episodes.telegram.is_dead=True
+            tv_cursor = db["tv"].find({"seasons.episodes.telegram.is_dead": True})
+            async for tv in tv_cursor:
+                title = tv.get("title")
+                year = tv.get("year")
+                poster = tv.get("poster")
+                for season in tv.get("seasons", []):
+                    s_num = season.get("season_number")
+                    for ep in season.get("episodes", []):
+                        e_num = ep.get("episode_number")
+                        for quality in ep.get("telegram", []):
+                            if quality.get("is_dead"):
+                                dead_links.append({
+                                    "type": "tv",
+                                    "tmdb_id": tv.get("tmdb_id"),
+                                    "db_index": tv.get("db_index", i),
+                                    "title": f"{title} (S{s_num:02d}E{e_num:02d})",
+                                    "year": year,
+                                    "poster": poster,
+                                    "season": s_num,
+                                    "episode": e_num,
+                                    "quality_id": quality.get("id"),
+                                    "quality": quality.get("quality"),
+                                    "size": quality.get("size"),
+                                    "date_added": quality.get("date_added")
+                                })
+                                
+        return dead_links
+
+    # -------------------------------
+    # Stream Analytics
+    # -------------------------------
+
+    async def log_stream_stats(self, stats: dict) -> None:
+        """Persist a finished-stream record to the tracking DB for analytics."""
+        try:
+            record = {
+                "stream_id":   stats.get("stream_id"),
+                "msg_id":      stats.get("msg_id"),
+                "chat_id":     stats.get("chat_id"),
+                "dc_id":       stats.get("dc_id"),
+                "title":       stats.get("meta", {}).get("title"),  # Added title
+                "client_index": stats.get("client_index"),
+                "total_bytes": stats.get("total_bytes", 0),
+                "duration_sec": round(stats.get("duration", 0.0), 2),
+                "avg_mbps":    round(stats.get("avg_mbps", 0.0), 3),
+                "peak_mbps":   round(stats.get("peak_mbps", 0.0), 3),
+                "status":      stats.get("status", "finished"),
+                "parallelism": stats.get("parallelism"),
+                "chunk_size":  stats.get("chunk_size"),
+                "logged_at":   datetime.utcnow(),
+            }
+            await self.dbs["tracking"]["stream_analytics"].insert_one(record)
+        except Exception as e:
+            LOGGER.warning(f"Stream analytics log failed: {e}")
+
+    async def get_stream_analytics(self, limit: int = 200) -> dict:
+        """Return summary stats + recent stream records from the tracking DB."""
+        try:
+            col = self.dbs["tracking"]["stream_analytics"]
+
+            # Aggregate totals
+            pipeline = [
+                {"$group": {
+                    "_id": None,
+                    "total_streams":     {"$sum": 1},
+                    "total_bytes":       {"$sum": "$total_bytes"},
+                    "avg_speed":         {"$avg": "$avg_mbps"},
+                    "peak_speed":        {"$max": "$peak_mbps"},
+                    "avg_duration":      {"$avg": "$duration_sec"},
+                }},
+            ]
+            agg = await col.aggregate(pipeline).to_list(1)
+            summary = agg[0] if agg else {}
+            summary.pop("_id", None)
+
+            # Per-client breakdown
+            per_client_pipeline = [
+                {"$group": {
+                    "_id":          "$client_index",
+                    "streams":      {"$sum": 1},
+                    "avg_mbps":     {"$avg": "$avg_mbps"},
+                    "peak_mbps":    {"$max": "$peak_mbps"},
+                    "total_bytes":  {"$sum": "$total_bytes"},
+                }},
+                {"$sort": {"_id": 1}},
+            ]
+            per_client = await col.aggregate(per_client_pipeline).to_list(None)
+            for row in per_client:
+                row["client_index"] = row.pop("_id")
+                row["avg_mbps"]     = round(row.get("avg_mbps", 0), 3)
+                row["peak_mbps"]    = round(row.get("peak_mbps", 0), 3)
+
+            # Recent records (newest first)
+            recent_cursor = col.find(
+                {},
+                {"_id": 0, "stream_id": 1, "client_index": 1, "dc_id": 1,
+                 "total_bytes": 1, "duration_sec": 1, "avg_mbps": 1,
+                 "peak_mbps": 1, "status": 1, "logged_at": 1, "title": 1}
+            ).sort("logged_at", DESCENDING).limit(limit)
+            recent = await recent_cursor.to_list(None)
+            for r in recent:
+                if "logged_at" in r:
+                    r["logged_at"] = r["logged_at"].isoformat()
+
+            return {
+                "summary":    summary,
+                "per_client": per_client,
+                "recent":     recent,
+            }
+        except Exception as e:
+            LOGGER.error(f"get_stream_analytics error: {e}")
+            return {"summary": {}, "per_client": [], "recent": []}

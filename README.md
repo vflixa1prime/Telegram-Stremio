@@ -24,6 +24,7 @@
 
 - [🚀 Introduction](#-introduction)
   - [✨ Key Features](#-key-features)
+  - [🆕 New Features](#-new-features)
 - [⚙️ How It Works](#️-how-it-works)
   - [Overview](#overview)
   - [Upload Guidelines](#upload-guidelines)
@@ -65,6 +66,16 @@ This project is a **next-generation Telegram Stremio Media Server** that allows 
 - 🎬 **IMDB and TMDB Metadata Integration** 
 - ♾️ **No File Expiration** 
 - 🧠 **Admin Panel Support** 
+
+
+## 🆕 New Features
+
+- ⚡ **Speed Test** – Speed testing added for all bots on each file to optimize streaming performance.
+- 🔄 **Improved Load Balancer** – Enhanced load balancing algorithm for better traffic distribution across multiple tokens.
+- 🚫 **Failed Bot Management** – Max failed bots will be marked as shadow or idle for buffer optimization. This is due to some data center bots having rate-limiting constraints.
+- 📊 **Bot-wise Analysis** – Detailed bot performance analytics available in the admin dashboard for monitoring and optimization.
+- 🧹 **Deleted File Detection** – Automatic detection of deleted files on every restart, with admin capability to manually remove them from the database.
+- 🛠️ **Additional Admin Features** – Various small enhancements and improvements for administrators.
 
 
 ## ⚙️ How It Works
@@ -539,8 +550,8 @@ If you want to use **only** your **Telegram Stremio Media Server addon** for met
 
 ## 🏅 **Contributor**
 
-|<img width="80" src="https://avatars.githubusercontent.com/u/113664541">|<img width="80" src="https://avatars.githubusercontent.com/u/13152917">|<img width="80" src="https://avatars.githubusercontent.com/u/14957082">|
-|:---:|:---:|:---:|
-|[`Karan`](https://github.com/Weebzone)|[`Stremio`](https://github.com/Stremio)|[`ChatGPT`](https://github.com/OPENAI)|
-|Author|Stremio SDK|Refactor
+|<img width="80" src="https://avatars.githubusercontent.com/u/113664541">|<img width="80" src="https://avatars.githubusercontent.com/u/13152917">|<img width="80" src="https://avatars.githubusercontent.com/u/14957082">|<img width="80" src="https://raw.githubusercontent.com/vflixa1prime/Readme/main/VFlixPRime.png">|
+|:---:|:---:|:---:|:---:|
+|[`Karan`](https://github.com/Weebzone)|[`Stremio`](https://github.com/Stremio)|[`ChatGPT`](https://github.com/OPENAI)|[`VFlix Prime`](https://t.me/vflixprime)|
+|Author|Stremio SDK|Refactor|Community Support
 

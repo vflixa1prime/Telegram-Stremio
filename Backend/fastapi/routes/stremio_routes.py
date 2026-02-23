@@ -361,4 +361,17 @@ async def get_streams(
         key=lambda s: get_resolution_priority(s.get("name", "")),
         reverse=True
     )
+
+    # Deduplicate stream names — Stremio collapses streams with identical names,
+    # so when two files share the same caption we append (1), (2) ... to each duplicate.
+    name_count: dict = {}
+    for s in streams:
+        name_count[s["name"]] = name_count.get(s["name"], 0) + 1
+
+    seen: dict = {}
+    for s in streams:
+        if name_count[s["name"]] > 1:
+            seen[s["name"]] = seen.get(s["name"], 0) + 1
+            s["name"] = f"{s['name']} ({seen[s['name']]})"
+
     return {"streams": streams}
