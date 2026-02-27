@@ -25,7 +25,8 @@
 - [🚀 Introduction](#-introduction)
   - [✨ Key Features](#-key-features)
   - [🆕 New Features](#-new-features)
-  - [💳 Subscription Management](#-subscription-management)
+  - [� Subscription Management](#-subscription-management)
+  - [💳 Subscription Management](#-subscription-management-config)
   - [📋 Plans](#-subscription-plans)
   - [🤖 Bot Payment Flow](#-bot-payment-flow)
   - [🗃️ Access Management](#️-access-management)
@@ -279,6 +280,18 @@ All environment variables for this project are defined in the `config.env` file.
 | **`ADMIN_PASSWORD`** | Password for Admin Panel access.|
  **⚠️ Change from default values for security.** 
 
+### 💳 Subscription Management Config
+
+Enable the subscription feature to gate access to streams behind a paid plan. When `SUBSCRIPTION=True`, every user must have an active subscription to stream content.
+
+| Variable | Description |
+| :--- | :--- |
+| **`SUBSCRIPTION`** | Enable (`True`) or disable (`False`) the subscription gate. When enabled, users without an active subscription see an expired message in Stremio instead of streams. *Default: `False`*. |
+| **`SUBSCRIPTION_GROUP_ID`** | Telegram **group/channel ID** where approved subscribers are invited. Users receive an invite link upon payment approval. |
+| **`APPROVER_IDS`** | Comma-separated Telegram user IDs of admins who can **approve or reject** subscription payment requests. |
+| **`SUBSCRIPTION_URL`** | Telegram bot URL (e.g. `https://t.me/your_bot`) shown to expired users in Stremio so they can renew. |
+
+> 💡 `SUBSCRIPTION_GROUP_ID` and `APPROVER_IDS` must be set **without quotes** in `config.env`.
 
 ### 🧰 Additional CDN Bots (Multi-Token System)
 
@@ -312,21 +325,6 @@ Each plan has:
 - **Duration** in days
 - **Price** (for display)
 - **Description**
-
-
-### 💳 Subscription Management Config
-
-Enable the subscription feature to gate access to streams behind a paid plan. When `SUBSCRIPTION=True`, every user must have an active subscription to stream content.
-
-| Variable | Description |
-| :--- | :--- |
-| **`SUBSCRIPTION`** | Enable (`True`) or disable (`False`) the subscription gate. When enabled, users without an active subscription see an expired message in Stremio instead of streams. *Default: `False`*. |
-| **`SUBSCRIPTION_GROUP_ID`** | Telegram **group/channel ID** where approved subscribers are invited. Users receive an invite link upon payment approval. |
-| **`APPROVER_IDS`** | Comma-separated Telegram user IDs of admins who can **approve or reject** subscription payment requests. |
-| **`SUBSCRIPTION_URL`** | Telegram bot URL (e.g. `https://t.me/your_bot`) shown to expired users in Stremio so they can renew. |
-
-> 💡 `SUBSCRIPTION_GROUP_ID` and `APPROVER_IDS` must be set **without quotes** in `config.env`.
-
 
 Plans are stored in MongoDB and can be added, edited, or deleted at any time without restarting.
 
