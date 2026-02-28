@@ -88,6 +88,16 @@ This project is a **next-generation Telegram Stremio Media Server** that allows 
 - 🛠️ **Additional Admin Features** – Various small enhancements and improvements for administrators.
 
 
+## 🆕 New Features
+
+- ⚡ **Speed Test** – Speed testing added for all bots on each file to optimize streaming performance.
+- 🔄 **Improved Load Balancer** – Enhanced load balancing algorithm for better traffic distribution across multiple tokens.
+- 🚫 **Failed Bot Management** – Max failed bots will be marked as shadow or idle for buffer optimization. This is due to some data center bots having rate-limiting constraints.
+- 📊 **Bot-wise Analysis** – Detailed bot performance analytics available in the admin dashboard for monitoring and optimization.
+- 🧹 **Deleted File Detection** – Automatic detection of deleted files on every restart, with admin capability to manually remove them from the database.
+- 🛠️ **Additional Admin Features** – Various small enhancements and improvements for administrators.
+
+
 ## ⚙️ How It Works
 
 This project acts as a **bridge between Telegram storage and Stremio streaming**, connecting **Telegram**, **FastAPI**, and **Stremio** to enable seamless movie and TV show streaming directly from Telegram files.
